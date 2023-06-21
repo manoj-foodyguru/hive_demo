@@ -4,22 +4,16 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:hive/hive.dart';
-import 'package:isardb/data/operations.dart';
+import 'package:isardb/data/local_data_access.dart';
+import 'package:isardb/models/address.dart';
 import 'package:isardb/models/user.dart';
 import 'package:isardb/user-list.dart';
 import 'package:path_provider/path_provider.dart' as path_provider;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (kIsWeb) {
-    Hive.init("./");
-  } else {
-    Directory appDocumentsDirectory =
-        await path_provider.getApplicationDocumentsDirectory();
-    Hive.init(appDocumentsDirectory.path);
-  }
 
-  Operations().registerAdapter();
+  LocalDataAccess().init();
   runApp(App());
 }
 
@@ -46,6 +40,7 @@ class _UserFormState extends State<UserForm> {
 
   String? _name;
   int? _age;
+  String? _country;
 
   save() async {
     var user = User();
@@ -53,18 +48,25 @@ class _UserFormState extends State<UserForm> {
     user.age = _age;
     user.id = Random().nextInt(100);
 
-    var response = await Operations().dbPush<User>(user, user.id, "users");
-    user.save();
+    await LocalDataAccess().push<User>(user, user.id, "users");
+
+    var address = Address();
+    address.country = _country;
+    await LocalDataAccess().push<Address>(address, user.id, "address");
+
+    // user.save();
   }
 
   getData() async {
-    User response = await Operations().dbGet(26, 'users');
+    User response = await LocalDataAccess().get(26, 'users');
     print(response.id);
   }
 
   getAllData() async {
-    List response = await Operations().dbGetAll('users');
-    response.forEach((element) => print(element.name));
+    Map<String, dynamic> response = await LocalDataAccess().getAll('users');
+    response.entries.forEach((element) {
+      print(element);
+    });
   }
 
   @override
@@ -112,6 +114,20 @@ class _UserFormState extends State<UserForm> {
                         },
                       ),
                     ),
+                    Container(
+                      child: TextFormField(
+                        decoration: InputDecoration(labelText: 'Country'),
+                        validator: (value) {
+                          if (value!.isEmpty) {
+                            return 'Please enter your Country';
+                          }
+                          return null;
+                        },
+                        onSaved: (value) {
+                          _country = value;
+                        },
+                      ),
+                    ),
                     SizedBox(height: 16.0),
                     ElevatedButton(
                       onPressed: () {
@@ -132,7 +148,7 @@ class _UserFormState extends State<UserForm> {
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
           items.clear();
-          List response = await Operations().dbGetAll('users');
+          List response = await LocalDataAccess().getAll('users');
           response.forEach((element) => items.add(element.name));
           Navigator.push(context,
               MaterialPageRoute(builder: (_) => UserList(users: items)));
